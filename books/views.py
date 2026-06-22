@@ -53,21 +53,27 @@ class BookViewSet(viewsets.ModelViewSet):
     serializer_class = BookSerializer
 
     def get_permissions(self):
+        # Lecture (catalogue) : ouverte a tous, meme aux visiteurs.
         # Editer / supprimer : proprietaire ou admin. Valider : admin (gere
-        # dans l'action). Le reste : utilisateur authentifie.
+        # dans l'action). Creer : utilisateur authentifie.
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [permissions.IsAuthenticated(), IsOwnerOrAdmin()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
+        if user.is_authenticated and user.is_staff:
             # L'admin voit tout pour pouvoir moderer.
             return Book.objects.all()
-        # L'utilisateur voit les livres approuves + ses propres soumissions.
-        return Book.objects.filter(
-            Q(status=Book.APPROVED) | Q(created_by=user)
-        )
+        if user.is_authenticated:
+            # L'utilisateur voit les livres approuves + ses propres soumissions.
+            return Book.objects.filter(
+                Q(status=Book.APPROVED) | Q(created_by=user)
+            )
+        # Visiteur anonyme : uniquement les livres approuves.
+        return Book.objects.filter(status=Book.APPROVED)
 
     def perform_create(self, serializer):
         # Un livre cree par un admin est approuve d'office.
@@ -113,14 +119,18 @@ class ReviewViewSet(viewsets.ModelViewSet):
     serializer_class = ReviewSerializer
 
     def get_permissions(self):
+        # Lecture des avis : ouverte a tous. Creer : authentifie.
+        if self.action in ["list", "retrieve"]:
+            return [permissions.AllowAny()]
         if self.action in ["update", "partial_update", "destroy"]:
             return [permissions.IsAuthenticated(), IsOwnerOrAdmin()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):
         # On ne montre que les avis des livres approuves (ou tout pour l'admin).
+        user = self.request.user
         qs = Review.objects.select_related("book", "author")
-        if not self.request.user.is_staff:
+        if not (user.is_authenticated and user.is_staff):
             qs = qs.filter(book__status=Book.APPROVED)
         book_id = self.request.query_params.get("book")
         if book_id:
@@ -129,6 +139,31 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+
+class MeView(APIView):
+    """Renvoie les infos de l'utilisateur connecte (nom, email, role admin)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        summary="Usuario atual",
+        responses={
+            200: OpenApiResponse(
+                description="username, email et is_staff de l'utilisateur connecte."
+            )
+        },
+        tags=["auth"],
+    )
+    def get(self, request):
+        user = request.user
+        return Response(
+            {
+                "username": user.username,
+                "email": user.email,
+                "is_staff": user.is_staff,
+            }
+        )
 
 
 class RegisterView(generics.CreateAPIView):

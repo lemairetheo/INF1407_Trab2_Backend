@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     BookViewSet,
     ChangePasswordView,
+    MeView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
@@ -16,6 +17,7 @@ router.register(r"reviews", ReviewViewSet, basename="review")
 
 urlpatterns = [
     path("", include(router.urls)),
+    path("auth/me/", MeView.as_view(), name="me"),
     path("auth/register/", RegisterView.as_view(), name="register"),
     path("auth/change-password/", ChangePasswordView.as_view(), name="change-password"),
     path(

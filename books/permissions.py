@@ -11,5 +11,9 @@ class IsOwnerOrAdmin(permissions.BasePermission):
     def has_object_permission(self, request, view, obj):
         if request.user and request.user.is_staff:
             return True
-        owner = getattr(obj, "created_by", None) or getattr(obj, "author", None)
+        owner = (
+            getattr(obj, "created_by", None)
+            or getattr(obj, "author", None)
+            or getattr(obj, "user", None)
+        )
         return owner == request.user

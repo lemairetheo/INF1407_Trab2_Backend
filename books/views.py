@@ -1,27 +1,35 @@
+from datetime import date, timedelta
+
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
 from django.conf import settings
 from django.db.models import Q
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
-from rest_framework import generics, permissions, status, viewsets
+from rest_framework import generics, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Book, Review
+from .models import Book, Loan, Reservation, Review
 from .permissions import IsOwnerOrAdmin
 from .serializers import (
     BookSerializer,
     ChangePasswordSerializer,
+    LoanSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetRequestSerializer,
     RegisterSerializer,
+    ReservationSerializer,
     ReviewSerializer,
 )
+
+# Duree d'un emprunt en jours.
+LOAN_DURATION_DAYS = 14
 
 
 @extend_schema_view(
@@ -100,6 +108,79 @@ class BookViewSet(viewsets.ModelViewSet):
         book.save()
         return Response(self.get_serializer(book).data)
 
+    @extend_schema(
+        summary="Emprunter un livre",
+        description=(
+            "Cree un emprunt si un exemplaire est disponible. "
+            "Sinon, renvoie une erreur invitant a reserver."
+        ),
+        request=None,
+        responses={201: LoanSerializer},
+        tags=["loans"],
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def borrow(self, request, pk=None):
+        book = self.get_object()
+        if book.status != Book.APPROVED:
+            return Response(
+                {"detail": "Livro nao disponivel."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if book.loans.filter(user=request.user, status=Loan.ACTIVE).exists():
+            return Response(
+                {"detail": "Voce ja tem este livro emprestado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if book.available_copies <= 0:
+            return Response(
+                {"detail": "Sem exemplares disponiveis. Faca uma reserva."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        loan = Loan.objects.create(
+            book=book,
+            user=request.user,
+            due_date=date.today() + timedelta(days=LOAN_DURATION_DAYS),
+        )
+        return Response(
+            LoanSerializer(loan).data, status=status.HTTP_201_CREATED
+        )
+
+    @extend_schema(
+        summary="Reserver un livre",
+        description="Entre dans la file d'attente d'un livre.",
+        request=None,
+        responses={201: ReservationSerializer},
+        tags=["reservations"],
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def reserve(self, request, pk=None):
+        book = self.get_object()
+        if book.status != Book.APPROVED:
+            return Response(
+                {"detail": "Livro nao disponivel."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if book.reservations.filter(
+            user=request.user, status=Reservation.WAITING
+        ).exists():
+            return Response(
+                {"detail": "Voce ja reservou este livro."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reservation = Reservation.objects.create(book=book, user=request.user)
+        return Response(
+            ReservationSerializer(reservation).data,
+            status=status.HTTP_201_CREATED,
+        )
+
 
 @extend_schema_view(
     list=extend_schema(summary="Lister les avis", tags=["reviews"]),
@@ -139,6 +220,105 @@ class ReviewViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Lister les emprunts",
+        description=(
+            "Utilisateur normal : ses propres emprunts. "
+            "Administrateur : tous les emprunts de la bibliotheque."
+        ),
+        tags=["loans"],
+    ),
+    retrieve=extend_schema(tags=["loans"]),
+)
+class LoanViewSet(viewsets.ReadOnlyModelViewSet):
+    """Consultation des emprunts + action de retour."""
+
+    serializer_class = LoanSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = Loan.objects.select_related("book", "user")
+        if not self.request.user.is_staff:
+            qs = qs.filter(user=self.request.user)
+        return qs
+
+    @extend_schema(
+        summary="Retourner un livre",
+        description=(
+            "Marque l'emprunt comme rendu. Satisfait automatiquement la "
+            "premiere reservation en attente. Reserve au proprietaire ou a un admin."
+        ),
+        request=None,
+        responses={200: LoanSerializer},
+        tags=["loans"],
+    )
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="return",
+        permission_classes=[permissions.IsAuthenticated, IsOwnerOrAdmin],
+    )
+    def return_loan(self, request, pk=None):
+        loan = self.get_object()
+        if loan.status == Loan.RETURNED:
+            return Response(
+                {"detail": "Emprestimo ja devolvido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        loan.status = Loan.RETURNED
+        loan.returned_at = timezone.now()
+        loan.save()
+        # Le retour libere un exemplaire : on sert la 1ere reservation en attente.
+        next_reservation = (
+            loan.book.reservations.filter(status=Reservation.WAITING)
+            .order_by("created_at")
+            .first()
+        )
+        if next_reservation:
+            next_reservation.status = Reservation.FULFILLED
+            next_reservation.save()
+        return Response(LoanSerializer(loan).data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="Lister les reservations",
+        description=(
+            "Utilisateur normal : ses propres reservations. "
+            "Administrateur : toutes les reservations."
+        ),
+        tags=["reservations"],
+    ),
+    retrieve=extend_schema(tags=["reservations"]),
+    destroy=extend_schema(
+        summary="Annuler une reservation",
+        description="Le proprietaire ou un admin peut annuler une reservation.",
+        tags=["reservations"],
+    ),
+)
+class ReservationViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Consultation et annulation des reservations."""
+
+    serializer_class = ReservationSerializer
+
+    def get_permissions(self):
+        if self.action == "destroy":
+            return [permissions.IsAuthenticated(), IsOwnerOrAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = Reservation.objects.select_related("book", "user")
+        if not self.request.user.is_staff:
+            qs = qs.filter(user=self.request.user)
+        return qs
 
 
 class MeView(APIView):

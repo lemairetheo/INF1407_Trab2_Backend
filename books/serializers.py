@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Book, Review
+from .models import Book, Loan, Reservation, Review
 
 
 class ReviewSerializer(serializers.ModelSerializer):
@@ -20,6 +20,7 @@ class BookSerializer(serializers.ModelSerializer):
 
     created_by = serializers.ReadOnlyField(source="created_by.username")
     reviews = ReviewSerializer(many=True, read_only=True)
+    available_copies = serializers.ReadOnlyField()
 
     class Meta:
         model = Book
@@ -29,11 +30,53 @@ class BookSerializer(serializers.ModelSerializer):
             "author",
             "description",
             "status",
+            "total_copies",
+            "available_copies",
             "created_by",
             "created_at",
             "reviews",
         ]
         read_only_fields = ["status", "created_by"]
+
+
+class LoanSerializer(serializers.ModelSerializer):
+    """Serialise un emprunt avec quelques infos du livre et de l'utilisateur."""
+
+    user = serializers.ReadOnlyField(source="user.username")
+    book_title = serializers.ReadOnlyField(source="book.title")
+
+    class Meta:
+        model = Loan
+        fields = [
+            "id",
+            "book",
+            "book_title",
+            "user",
+            "borrowed_at",
+            "due_date",
+            "returned_at",
+            "status",
+        ]
+        read_only_fields = fields
+
+
+class ReservationSerializer(serializers.ModelSerializer):
+    """Serialise une reservation (file d'attente)."""
+
+    user = serializers.ReadOnlyField(source="user.username")
+    book_title = serializers.ReadOnlyField(source="book.title")
+
+    class Meta:
+        model = Reservation
+        fields = [
+            "id",
+            "book",
+            "book_title",
+            "user",
+            "created_at",
+            "status",
+        ]
+        read_only_fields = fields
 
 
 class RegisterSerializer(serializers.ModelSerializer):

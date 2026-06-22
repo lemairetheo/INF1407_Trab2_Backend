@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Book, Review
+from .models import Book, Loan, Reservation, Review
 
 
 @admin.register(Book)
@@ -20,3 +20,17 @@ class ReviewAdmin(admin.ModelAdmin):
     list_display = ("book", "author", "rating", "created_at")
     list_filter = ("rating", "author")
     search_fields = ("comment",)
+
+
+@admin.register(Loan)
+class LoanAdmin(admin.ModelAdmin):
+    list_display = ("book", "user", "borrowed_at", "due_date", "status")
+    list_filter = ("status", "user")
+    search_fields = ("book__title", "user__username")
+
+
+@admin.register(Reservation)
+class ReservationAdmin(admin.ModelAdmin):
+    list_display = ("book", "user", "created_at", "status")
+    list_filter = ("status", "user")
+    search_fields = ("book__title", "user__username")

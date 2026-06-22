@@ -4,16 +4,20 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     BookViewSet,
     ChangePasswordView,
+    LoanViewSet,
     MeView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
+    ReservationViewSet,
     ReviewViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"books", BookViewSet, basename="book")
 router.register(r"reviews", ReviewViewSet, basename="review")
+router.register(r"loans", LoanViewSet, basename="loan")
+router.register(r"reservations", ReservationViewSet, basename="reservation")
 
 urlpatterns = [
     path("", include(router.urls)),

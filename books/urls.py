@@ -7,10 +7,12 @@ from .views import (
     PasswordResetConfirmView,
     PasswordResetRequestView,
     RegisterView,
+    ReviewViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"books", BookViewSet, basename="book")
+router.register(r"reviews", ReviewViewSet, basename="review")
 
 urlpatterns = [
     path("", include(router.urls)),

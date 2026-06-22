@@ -2,13 +2,24 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
-from .models import Book
+from .models import Book, Review
+
+
+class ReviewSerializer(serializers.ModelSerializer):
+    """Serialise un avis. author est rempli a partir de l'utilisateur connecte."""
+
+    author = serializers.ReadOnlyField(source="author.username")
+
+    class Meta:
+        model = Review
+        fields = ["id", "book", "author", "rating", "comment", "created_at"]
 
 
 class BookSerializer(serializers.ModelSerializer):
-    """Serialise un livre. owner est en lecture seule (rempli a partir du token)."""
+    """Serialise un livre. status et created_by sont en lecture seule."""
 
-    owner = serializers.ReadOnlyField(source="owner.username")
+    created_by = serializers.ReadOnlyField(source="created_by.username")
+    reviews = ReviewSerializer(many=True, read_only=True)
 
     class Meta:
         model = Book
@@ -17,10 +28,12 @@ class BookSerializer(serializers.ModelSerializer):
             "title",
             "author",
             "description",
-            "read",
+            "status",
+            "created_by",
             "created_at",
-            "owner",
+            "reviews",
         ]
+        read_only_fields = ["status", "created_by"]
 
 
 class RegisterSerializer(serializers.ModelSerializer):

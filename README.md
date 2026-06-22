@@ -1,7 +1,9 @@
 # Biblioteca API — INF1407 (Backend)
 
 Backend do **2º Trabalho de Programação para Web**. API REST desenvolvida em
-**Django + Django REST Framework** para gerenciar um catálogo de livros por usuário.
+**Django + Django REST Framework** para uma **biblioteca comunitária**:
+administradores cadastram livros diretamente, usuários comuns sugerem livros
+que precisam ser aprovados, e todos podem avaliar os livros.
 
 > O frontend que consome esta API está em outro repositório:
 > [INF1407_Trab2_Frontend](https://github.com/lemairetheo/INF1407_Trab2_Frontend)
@@ -13,17 +15,25 @@ Backend do **2º Trabalho de Programação para Web**. API REST desenvolvida em
 
 ## Escopo
 
-API com autenticação JWT que permite a cada usuário gerenciar seu próprio
-catálogo de livros (CRUD completo). Cada usuário só enxerga e manipula os
-livros que lhe pertencem.
+Biblioteca comunitária com autenticação JWT e dois papéis de usuário:
+
+* **Administrador (staff):** cadastra livros que já entram aprovados e
+  visíveis para todos; pode aprovar sugestões e **remover qualquer avaliação**.
+* **Usuário comum:** sugere livros (entram como *pendentes* até a aprovação de
+  um admin); enxerga os livros aprovados + suas próprias sugestões; pode avaliar
+  livros e remover apenas seus próprios avisos.
 
 ### Funcionalidades
 
 * **CRUD** de livros (`/api/books/`) — endpoint protegido (somente autenticado).
+* **Fluxo de moderação** — livros de usuários comuns ficam `pending` até
+  `POST /api/books/{id}/approve/` (somente admin).
+* **Avaliações** (`/api/reviews/`) — qualquer usuário avalia; autor ou admin
+  remove.
 * **Autenticação JWT** — login e refresh de token.
-* **Gerência de usuário** — cadastro, troca de senha, "esqueci minha senha"
-  (envio de link por email).
-* **Visões diferentes por usuário** — cada usuário vê apenas seus livros.
+* **Gerência de usuário** — cadastro, troca de senha, "esqueci minha senha".
+* **Visões diferentes por usuário** — admin vê tudo; usuário comum vê só o
+  aprovado e o que ele mesmo sugeriu.
 * **Documentação Swagger** em `/api/docs/`.
 
 ## Tecnologias
@@ -71,8 +81,11 @@ A API fica disponível em `http://localhost:8000/`.
 | POST | `/api/auth/change-password/` | Troca de senha | Sim |
 | POST | `/api/auth/password-reset/` | Solicita reset por email | Não |
 | POST | `/api/auth/password-reset/confirm/` | Confirma reset | Não |
-| GET/POST | `/api/books/` | Lista / cria livros | Sim |
-| GET/PUT/PATCH/DELETE | `/api/books/{id}/` | Detalha / edita / remove | Sim |
+| GET/POST | `/api/books/` | Lista / cria (ou sugere) livros | Sim |
+| GET/PUT/PATCH/DELETE | `/api/books/{id}/` | Detalha / edita / remove | Sim (dono ou admin) |
+| POST | `/api/books/{id}/approve/` | Aprova um livro pendente | Sim (admin) |
+| GET/POST | `/api/reviews/` | Lista (`?book=<id>`) / cria avaliação | Sim |
+| DELETE | `/api/reviews/{id}/` | Remove avaliação | Sim (autor ou admin) |
 | GET | `/api/docs/` | Documentação Swagger | Não |
 
 ## Como usar (exemplo)

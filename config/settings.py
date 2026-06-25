@@ -25,6 +25,19 @@ DEBUG = os.environ.get("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
+# Railway expose le domaine public via cette variable : on l'ajoute
+# automatiquement aux hotes et origines de confiance.
+RAILWAY_DOMAIN = os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+if RAILWAY_DOMAIN:
+    ALLOWED_HOSTS.append(RAILWAY_DOMAIN)
+
+# Origines de confiance pour le CSRF (necessaire pour l'admin Django en HTTPS).
+CSRF_TRUSTED_ORIGINS = [
+    o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o
+]
+if RAILWAY_DOMAIN:
+    CSRF_TRUSTED_ORIGINS.append(f"https://{RAILWAY_DOMAIN}")
+
 # URL du frontend (utilisee dans les emails de reinitialisation)
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 

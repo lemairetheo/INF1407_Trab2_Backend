@@ -6,7 +6,9 @@ services:
     runtime: python
     plan: free
     buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
-    startCommand: "python manage.py migrate && gunicorn config.wsgi --bind 0.0.0.0:$PORT"
+    # migrate, puis cree le superuser (idempotent : ignore s'il existe deja),
+    # puis lance gunicorn. Le superuser vient des variables DJANGO_SUPERUSER_*.
+    startCommand: "python manage.py migrate && (python manage.py createsuperuser --noinput || true) && gunicorn config.wsgi --bind 0.0.0.0:$PORT"
     envVars:
       - key: SECRET_KEY
         generateValue: true
@@ -14,6 +16,13 @@ services:
         value: "False"
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # Superuser cree automatiquement au demarrage (Shell indisponible en free).
+      - key: DJANGO_SUPERUSER_USERNAME
+        value: "admin"
+      - key: DJANGO_SUPERUSER_EMAIL
+        value: "admin@biblioteca.local"
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: inf1407-biblioteca-db

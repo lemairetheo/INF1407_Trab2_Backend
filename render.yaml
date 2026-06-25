@@ -1,0 +1,36 @@
+# Blueprint Render : cree un service web Django + une base PostgreSQL.
+# Sur Render : New > Blueprint > selectionner ce repo.
+services:
+  - type: web
+    name: inf1407-biblioteca-api
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    startCommand: "python manage.py migrate && gunicorn config.wsgi --bind 0.0.0.0:$PORT"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: inf1407-biblioteca-db
+          property: connectionString
+      # A completer dans le dashboard apres le deploiement du frontend :
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      # Email (Mailtrap) - a renseigner dans le dashboard :
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+
+databases:
+  - name: inf1407-biblioteca-db
+    plan: free
